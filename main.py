@@ -243,17 +243,24 @@ class CX:
         today = today.strftime("%Y-%m-%d")
         tomorrow = tomorrow.strftime("%Y-%m-%d")
         time_list = [("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")]
+        index_url = 'https://office.chaoxing.com/front/apps/seat/list?'f'deptIdEnc={self.deptIdEnc}'
         for start, end in time_list:
-            self.submit_step(today, tomorrow, room_id, seat_num, start, end)
+            # 重试请求
+            for i in range(3):
+                # 提交步骤
+                result = self.submit_step(today, tomorrow, room_id, seat_num, start, end, index_url)
+                print(
+                    f"{get_formatted_datetime()}:手机号{self.phone},房间号{room_id},座位{seat_num},起始时间{start},结束时间{end},预约日期{tomorrow},预约结果{result},请求次数{i}")
+                if result['success']:
+                    break
 
-    def submit_step(self, today, tomorrow, room_id, seat_num, start, end):
+    def submit_step(self, today, tomorrow, room_id, seat_num, start, end, index_url):
         # 注意 老版本的系统需要将url中的seat改为seatengine且不需要第一步获取list。有可能需要提供seatId的值
-        url1 = 'https://office.chaoxing.com/front/apps/seat/list?'f'deptIdEnc={self.deptIdEnc}'
         # 获取token
-        response = self.session.get(url=url1)
+        response = self.session.get(url=index_url)
         pageToken = re.compile(r"'&pageToken=' \+ '(.*)'}").findall(response.text)[0]
         referer = f"https://reserve.chaoxing.com/front/third/apps/seat/select?id=5933&day={today}&backLevel=2&pageToken={pageToken}"
-        token = self.get_token(referer, url1)
+        token = self.get_token(referer, index_url)
         # 获取图片验证码
         capture_data = self.get_capture(referer)
         # 校验图片的token
@@ -267,8 +274,7 @@ class CX:
         # 提交中的一个参数
         captcha = self.verify_capture(verify_token, d)
         result = self.appoint_seat(captcha, token, referer, start, end, tomorrow, room_id, seat_num)
-        print(
-            f"{get_formatted_datetime()}:手机号{self.phone},房间号{room_id},座位{seat_num},起始时间{start},结束时间{end},预约日期{tomorrow},预约结果{result}")
+        return result
 
     # 验证图片验证码
     def verify_capture(self, token, d):
