@@ -1,10 +1,9 @@
 #!/usr/bin/python3.7.0
 # -*- coding: utf-8 -*-
-import argparse
 import base64
 import json
 import re
-import time
+import sys
 from datetime import datetime, timedelta
 import cv2
 import numpy as np
@@ -13,9 +12,15 @@ from Cryptodome.Cipher import AES
 from Cryptodome.Util.Padding import pad
 from python.capature import sign
 from python.enc import enc
-import psutil
-import aiohttp
 import asyncio
+import aiohttp
+import time
+
+
+# 延时函数
+def delay(hour):
+    while datetime.now().hour != hour:
+        time.sleep(0.016)
 
 
 # 计算验证码的滑动距离
@@ -76,16 +81,9 @@ def encryptByAES(message):
 
 
 def get_param_dict():
-    def parse_key_value_pair(pair):
-        key, value = pair.split('=')
-        return key, value
-
-    parser = argparse.ArgumentParser()
-    # 解析键值对参数
-    parser.add_argument('key_value_pairs', nargs='+', type=parse_key_value_pair, help='键值对参数')
-    args = parser.parse_args()
-    # 将键值对参数存储在字典中
-    params = dict(args.key_value_pairs)
+    params = {}
+    for k, v in [i.split("=") for i in sys.argv[1:]]:
+        params[k] = v
     return params
 
 
@@ -246,7 +244,7 @@ class CX:
         index_url = 'https://office.chaoxing.com/front/apps/seat/list?'f'deptIdEnc={self.deptIdEnc}'
         for start, end in time_list:
             # 重试请求
-            for i in range(3):
+            for i in range(1):
                 # 提交步骤
                 result = self.submit_step(today, tomorrow, room_id, seat_num, start, end, index_url)
                 print(
@@ -329,7 +327,7 @@ class CX:
         params["enc"] = enc(params)
         response = self.session.get("https://reserve.chaoxing.com/data/apps/seat/submit", params=params,
                                     headers=headers)
-        return response.text
+        return response.json()
 
     def get_token(self, url, referer):
         headers = {
@@ -361,13 +359,13 @@ if __name__ == '__main__':
     # room_id 5933
     # seat_id 10
     start = time.time()
-    pid = psutil.Process().pid
-    psutil.Process(pid).nice(-20)
     params = get_param_dict()
     print(f"{get_formatted_datetime()}:脚本开始执行,执行的操作类型为:{params['type']}")
     cx = CX(params['user_name'], params["password"])
     if params["type"] == "submit":
         retry_cnt = 0
+        # 延时
+        delay(int(params["hour"]))
         try:
             cx.submit(params["room_id"], params["seat_id"])
         except Exception as e:
