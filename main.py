@@ -14,6 +14,34 @@ from Cryptodome.Util.Padding import pad
 from python.capature import sign
 from python.enc import enc
 import psutil
+import aiohttp
+import asyncio
+
+
+# 计算验证码的滑动距离
+def identify_gap(bg, tp):
+    '''
+    bg: 背景图片
+    tp: 缺口图片
+    out:输出图片
+    '''
+    bg, tp = asyncio.run(async_fetch_img(bg, tp))
+    # 读取背景图片和缺口图片
+    bg_img = cv2.imdecode(np.frombuffer(bg, np.uint8), cv2.IMREAD_COLOR)  # 背景图片
+    tp_img = cut_slide(tp)
+    # 识别图片边缘
+    bg_edge = cv2.Canny(bg_img, 100, 200)
+    tp_edge = cv2.Canny(tp_img, 100, 200)
+    # 转换图片格式
+    bg_pic = cv2.cvtColor(bg_edge, cv2.COLOR_GRAY2RGB)
+    tp_pic = cv2.cvtColor(tp_edge, cv2.COLOR_GRAY2RGB)
+    # 缺口匹配
+    res = cv2.matchTemplate(bg_pic, tp_pic, cv2.TM_CCOEFF_NORMED)
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)  # 寻找最优匹配
+    # 绘制方框
+    tl = max_loc  # 左上角点的坐标
+    # 返回缺口的X坐标
+    return tl[0]
 
 
 # 获取当前的时间
@@ -21,6 +49,19 @@ def get_formatted_datetime():
     now = datetime.now()
     formatted_datetime = now.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_datetime
+
+
+async def async_fetch(session: aiohttp.ClientSession, url):
+    async with session.get(url) as res:
+        return await res.content.read()
+
+
+# 异步获取图片的方法
+async def async_fetch_img(back_url, slide_url):
+    async with aiohttp.ClientSession() as session:
+        tasks = [asyncio.create_task(async_fetch(session, i)) for i in [back_url, slide_url]]
+        return await asyncio.gather(*tasks)
+
 
 # 加密函数
 def encryptByAES(message):
@@ -48,10 +89,9 @@ def get_param_dict():
     return params
 
 
-def cut_slide(slider_url):
-    response_slider = requests.get(slider_url)
+def cut_slide(slide):
     # 解码图像数据为NumPy数组
-    slider_array = np.frombuffer(response_slider.content, np.uint8)
+    slider_array = np.frombuffer(slide, np.uint8)
     # 将NumPy数组解码为OpenCV图像格式
     slider_image = cv2.imdecode(slider_array, cv2.IMREAD_UNCHANGED)
     # 提取滑块部分
@@ -223,35 +263,12 @@ class CX:
         # 缺块图
         cut_out_image_url = capture_data["imageVerificationVo"]["cutoutImage"]
         # 滑动的距离
-        d = self.identify_gap(shade_image_url, cut_out_image_url)
+        d = identify_gap(shade_image_url, cut_out_image_url)
         # 提交中的一个参数
         captcha = self.verify_capture(verify_token, d)
         result = self.appoint_seat(captcha, token, referer, start, end, tomorrow, room_id, seat_num)
         print(
             f"{get_formatted_datetime()}:手机号{self.phone},房间号{room_id},座位{seat_num},起始时间{start},结束时间{end},预约日期{tomorrow},预约结果{result}")
-
-    def identify_gap(self, bg, tp):
-        '''
-        bg: 背景图片
-        tp: 缺口图片
-        out:输出图片
-        '''
-        # 读取背景图片和缺口图片
-        bg_img = cv2.imdecode(np.frombuffer(self.session.get(bg).content, np.uint8), cv2.IMREAD_COLOR)  # 背景图片
-        tp_img = cut_slide(tp)
-        # 识别图片边缘
-        bg_edge = cv2.Canny(bg_img, 100, 200)
-        tp_edge = cv2.Canny(tp_img, 100, 200)
-        # 转换图片格式
-        bg_pic = cv2.cvtColor(bg_edge, cv2.COLOR_GRAY2RGB)
-        tp_pic = cv2.cvtColor(tp_edge, cv2.COLOR_GRAY2RGB)
-        # 缺口匹配
-        res = cv2.matchTemplate(bg_pic, tp_pic, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)  # 寻找最优匹配
-        # 绘制方框
-        tl = max_loc  # 左上角点的坐标
-        # 返回缺口的X坐标
-        return tl[0]
 
     # 验证图片验证码
     def verify_capture(self, token, d):
