@@ -17,6 +17,11 @@ import aiohttp
 import time
 
 
+# 获取当前的时间戳
+def get_time_stamp():
+    return int(time.time() * 1000)
+
+
 # 延时函数
 def delay(hour):
     while datetime.now().hour != hour:
@@ -105,6 +110,14 @@ def cut_slide(slide):
     return cropped_image
 
 
+# cv2的预加载
+def pre_load_cv2():
+    back_url = "https://captcha-c.chaoxing.com/slide/big/D4F574A3F334188D9C9C9264786BC786.jpg"
+    slide_url = "https://captcha-c.chaoxing.com/slide/small/D4F574A3F334188D9C9C9264786BC786.jpg"
+    d = identify_gap(back_url, slide_url)
+    print(f"{get_formatted_datetime()}:cv2预加载,滑动距离:{d}")
+
+
 class CX:
     # 实例化请传入手机号和密码
     def __init__(self, phonenums, password):
@@ -119,6 +132,14 @@ class CX:
         self.login()  # 第一步 必须
         self.get_fidEnc()  # 第二步 必须
         self.phone = phonenums
+        self.status = {
+            0: '待履约',
+            1: '学习中',
+            2: '已履约',
+            3: '暂离中',
+            5: '被监督中',
+            7: '已取消',
+        }
 
     # 获取cookies
     def login(self):
@@ -139,8 +160,6 @@ class CX:
             'independentId': 0
         }
         self.session.post('http://passport2.chaoxing.com/fanyalogin', data=data)
-        s_url = 'https://office.chaoxing.com/front/third/apps/seat/index'
-        self.session.get(s_url)
 
     # 获取学校id
     def get_fidEnc(self):
@@ -169,9 +188,48 @@ class CX:
 
     # 签到
     def sign(self):
-        # 注意 老版本的系统需要将url中的seat改为seatengine
+        # 获取当前的预约结果，判断是否需要签到
+        cur_submit = self.get_submit_list()
+        # 如果没有签到信息
+        if len(cur_submit) == 0:
+            print(f"{get_formatted_datetime()}:手机号{self.phone},你当前还没有预约信息！")
+            return
+        # 第一个为当前的数据
+        now = cur_submit[0]
+        # 判断当前是否到签到时间
+        if get_time_stamp() - now["startTime"] > -15 * 60 * 1000:
+            if now["status"] != 1:
+                # 不是就绪的逻辑，则直接进行签到
+                print(
+                    f"{get_formatted_datetime()}:手机号{self.phone},当前状态:{self.status.get(now['status'], '未知状态')},将为您签到")
+                self.submit_sign(now["id"])
+            else:
+                # 已经签到，查看当前是否还有下一个预约
+                if len(cur_submit) == 1:
+                    print(f"{get_formatted_datetime()}:手机号{self.phone},你已签到无需签到")
+                    return
+                # 查看结束时间与当前的差值是否在15分钟内
+                if -15 * 60 * 1000 < now['endTime'] - get_time_stamp() < 15 * 60 * 1000:
+                    print(
+                        f"{get_formatted_datetime()}:手机号{self.phone},距离下一个位置的签到时间不足15分钟，将签退签到下一个")
+                    # 退座
+                    self.signback(now["id"])
+                    # 进行下一个签到
+                    self.submit_sign(cur_submit[1]['id'])
+                # 状态既没有是其他的，也没有距离下次签到时间小于15分钟
+                else:
+                    # 无需进行签到
+                    print(
+                        f"{get_formatted_datetime()}:手机号{self.phone},当前已签到,且距离下个座位签到时间大于15分钟,无需签到")
+        else:
+            print(f"{get_formatted_datetime()}:手机号{self.phone},当前还未到签到时间")
+
+    # 提交落座的请求
+    def submit_sign(self, seat_id=None):
+        if seat_id is None:
+            seat_id = self.get_my_seat_id()
         response = self.session.get(url='https://office.chaoxing.com/data/apps/seat/sign?'
-                                        f'id={self.get_my_seat_id()}')
+                                        f'id={seat_id}')
         print(f"{get_formatted_datetime()}:签到信息{response.text}")
 
     # 暂离
@@ -182,10 +240,11 @@ class CX:
         print(response.json())
 
     # 退座
-    def signback(self):
-        # 注意 老版本的系统需要将url中的seat改为seatengine
+    def signback(self, seat_id=None):
+        if seat_id is None:
+            seat_id = self.get_my_seat_id()
         response = self.session.get(url='https://office.chaoxing.com/data/apps/seat/signback?'
-                                        f'id={self.get_my_seat_id()}')
+                                        f'id={seat_id}')
         print(response.json())
 
     # 取消
@@ -214,7 +273,7 @@ class CX:
         return "0秒"
 
     def get_capture(self, url):
-        t = int(time.time() * 1000)
+        t = get_time_stamp()
         capture_key, token = sign(t)
         # 参数
         params = {
@@ -242,15 +301,18 @@ class CX:
         tomorrow = tomorrow.strftime("%Y-%m-%d")
         time_list = [("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")]
         index_url = 'https://office.chaoxing.com/front/apps/seat/list?'f'deptIdEnc={self.deptIdEnc}'
+        t_start = time.time()
         for start, end in time_list:
             # 重试请求
             for i in range(1):
                 # 提交步骤
                 result = self.submit_step(today, tomorrow, room_id, seat_num, start, end, index_url)
                 print(
-                    f"{get_formatted_datetime()}:手机号{self.phone},房间号{room_id},座位{seat_num},起始时间{start},结束时间{end},预约日期{tomorrow},预约结果{result},请求次数{i}")
+                    f"{get_formatted_datetime()}:手机号{self.phone},房间号{room_id},座位{seat_num},起始时间{start},结束时间{end},预约日期{tomorrow},预约结果{result['msg']},请求次数{i}")
                 if result['success']:
                     break
+        t_end = time.time()
+        print(f"{get_formatted_datetime()}:签到完成,耗时{t_end - t_start}秒")
 
     def submit_step(self, today, tomorrow, room_id, seat_num, start, end, index_url):
         # 注意 老版本的系统需要将url中的seat改为seatengine且不需要第一步获取list。有可能需要提供seatId的值
@@ -288,7 +350,7 @@ class CX:
             "coordinate": json.dumps([]),
             "runEnv": "10",
             "version": "1.1.14",
-            "_": int(time.time() * 1000)
+            "_": get_time_stamp()
         }
         response = self.session.get(
             f'https://captcha.chaoxing.com/captcha/check/verification/result', params=params, headers=headers)
@@ -354,6 +416,11 @@ class CX:
         response = self.session.get(f"https://office.chaoxing.com/data/apps/seat/supervise?id={id}&objectId=")
         return response
 
+    # 获得预约的列表
+    def get_submit_list(self):
+        data = self.session.get("https://reserve.chaoxing.com/data/apps/seat/index").json()["data"]["curReserves"]
+        return data
+
 
 if __name__ == '__main__':
     # room_id 5933
@@ -364,7 +431,9 @@ if __name__ == '__main__':
     cx = CX(params['user_name'], params["password"])
     if params["type"] == "submit":
         retry_cnt = 0
-        # 延时
+        # 预加载opencv
+        pre_load_cv2()
+        # 延迟
         delay(int(params["hour"]))
         try:
             cx.submit(params["room_id"], params["seat_id"])
