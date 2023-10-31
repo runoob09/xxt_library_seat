@@ -1,20 +1,22 @@
 #!/usr/bin/python3.7.0
 # -*- coding: utf-8 -*-
+import asyncio
 import base64
 import json
 import re
 import sys
+import time
 from datetime import datetime, timedelta
+
+import aiohttp
 import cv2
 import numpy as np
 import requests
 from Cryptodome.Cipher import AES
 from Cryptodome.Util.Padding import pad
+
 from python.capature import sign
 from python.enc import enc
-import asyncio
-import aiohttp
-import time
 
 
 # 获取当前的时间戳
@@ -29,13 +31,13 @@ def delay(hour):
 
 
 # 计算验证码的滑动距离
-def identify_gap(bg, tp):
+async def identify_gap(bg, tp, session):
     '''
     bg: 背景图片
     tp: 缺口图片
     out:输出图片
     '''
-    bg, tp = asyncio.run(async_fetch_img(bg, tp))
+    bg, tp = await async_fetch_img(bg, tp, session)
     # 读取背景图片和缺口图片
     bg_img = cv2.imdecode(np.frombuffer(bg, np.uint8), cv2.IMREAD_COLOR)  # 背景图片
     tp_img = cut_slide(tp)
@@ -67,10 +69,9 @@ async def async_fetch(session: aiohttp.ClientSession, url):
 
 
 # 异步获取图片的方法
-async def async_fetch_img(back_url, slide_url):
-    async with aiohttp.ClientSession() as session:
-        tasks = [asyncio.create_task(async_fetch(session, i)) for i in [back_url, slide_url]]
-        return await asyncio.gather(*tasks)
+async def async_fetch_img(back_url, slide_url, session):
+    tasks = [asyncio.create_task(async_fetch(session, i)) for i in [back_url, slide_url]]
+    return await asyncio.gather(*tasks)
 
 
 # 加密函数
@@ -111,10 +112,10 @@ def cut_slide(slide):
 
 
 # cv2的预加载
-def pre_load_cv2():
+async def pre_load_cv2(session):
     back_url = "https://captcha-c.chaoxing.com/slide/big/D4F574A3F334188D9C9C9264786BC786.jpg"
     slide_url = "https://captcha-c.chaoxing.com/slide/small/D4F574A3F334188D9C9C9264786BC786.jpg"
-    d = identify_gap(back_url, slide_url)
+    d = await identify_gap(back_url, slide_url, session)
     print(f"{get_formatted_datetime()}:cv2预加载,滑动距离:{d}")
 
 
@@ -140,6 +141,8 @@ class CX:
             5: '被监督中',
             7: '已取消',
         }
+        self.token_pattern = re.compile("token = '(.*?)'")
+        self.page_token_pattern = re.compile(r"'&pageToken=' \+ '(.*)'}")
 
     # 获取cookies
     def login(self):
@@ -272,6 +275,14 @@ class CX:
             return str(s) + "秒"
         return "0秒"
 
+    def get_token(self, url, referer):
+        headers = {
+            "referer": referer
+        }
+        response = self.session.get(url, headers=headers)
+        res = self.token_pattern.findall(response.text)[0]
+        return res
+
     def get_capture(self, url):
         t = get_time_stamp()
         capture_key, token = sign(t)
@@ -290,8 +301,27 @@ class CX:
         data = response.text.replace("jQuery33105878581853212221_1698141785783(", "").replace(")", "")
         return json.loads(data)
 
+    async def async_get_capture(self, session: aiohttp.ClientSession, url):
+        t = get_time_stamp()
+        capture_key, token = sign(t)
+        # 参数
+        params = {
+            "callback": "jQuery33105878581853212221_1698141785783",
+            "captchaId": "42sxgHoTPTKbt0uZxPJ7ssOvtXr3ZgZ1",
+            "type": "slide",
+            "version": "1.1.14",
+            "captchaKey": capture_key,
+            "token": token,
+            "referer": url,
+            "_": t
+        }
+        async with session.get("https://captcha.chaoxing.com/captcha/get/verification/image", params=params) as res:
+            data = await res.text()
+            data = data.replace("jQuery33105878581853212221_1698141785783(", "").replace(")", "")
+            return json.loads(data)
+
     # 预约座位 需要自己修改
-    def submit(self, room_id, seat_num):
+    async def submit(self, room_id, seat_num, session: aiohttp.ClientSession, lens=4):
         # 获取今天的日期
         today = datetime.now().date()
         # 获取明天的日期
@@ -302,27 +332,22 @@ class CX:
         time_list = [("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")]
         index_url = 'https://office.chaoxing.com/front/apps/seat/list?'f'deptIdEnc={self.deptIdEnc}'
         t_start = time.time()
-        for start, end in time_list:
-            # 重试请求
-            for i in range(1):
-                # 提交步骤
-                result = self.submit_step(today, tomorrow, room_id, seat_num, start, end, index_url)
-                print(
-                    f"{get_formatted_datetime()}:手机号{self.phone},房间号{room_id},座位{seat_num},起始时间{start},结束时间{end},预约日期{tomorrow},预约结果{result['msg']},请求次数{i}")
-                if result['success']:
-                    break
+        for start, end in time_list[0:lens]:
+            # 提交步骤
+            result = await self.submit_step(today, tomorrow, room_id, seat_num, start, end, index_url, session)
+            print(
+                f"{get_formatted_datetime()}:手机号{self.phone},房间号{room_id},座位{seat_num},起始时间{start},结束时间{end},预约日期{tomorrow},预约结果{result.get('success', False)}")
         t_end = time.time()
         print(f"{get_formatted_datetime()}:签到完成,耗时{t_end - t_start}秒")
 
-    def submit_step(self, today, tomorrow, room_id, seat_num, start, end, index_url):
+    async def submit_step(self, today, tomorrow, room_id, seat_num, start, end, index_url,
+                          session: aiohttp.ClientSession):
         # 注意 老版本的系统需要将url中的seat改为seatengine且不需要第一步获取list。有可能需要提供seatId的值
         # 获取token
         response = self.session.get(url=index_url)
-        pageToken = re.compile(r"'&pageToken=' \+ '(.*)'}").findall(response.text)[0]
+        pageToken = self.page_token_pattern.findall(response.text)[0]
         referer = f"https://reserve.chaoxing.com/front/third/apps/seat/select?id=5933&day={today}&backLevel=2&pageToken={pageToken}"
-        token = self.get_token(referer, index_url)
-        # 获取图片验证码
-        capture_data = self.get_capture(referer)
+        token, capture_data = await self.get_token_capature(referer, index_url, session)
         # 校验图片的token
         verify_token = capture_data["token"]
         # 背景图
@@ -330,11 +355,14 @@ class CX:
         # 缺块图
         cut_out_image_url = capture_data["imageVerificationVo"]["cutoutImage"]
         # 滑动的距离
-        d = identify_gap(shade_image_url, cut_out_image_url)
+        d = await identify_gap(shade_image_url, cut_out_image_url, session)
         # 提交中的一个参数
         captcha = self.verify_capture(verify_token, d)
         result = self.appoint_seat(captcha, token, referer, start, end, tomorrow, room_id, seat_num)
         return result
+
+    async def get_token_capature(self, referer, index_url, session):
+        return await self.async_get_token(session, referer, index_url), await self.async_get_capture(session, referer)
 
     # 验证图片验证码
     def verify_capture(self, token, d):
@@ -391,13 +419,13 @@ class CX:
                                     headers=headers)
         return response.json()
 
-    def get_token(self, url, referer):
+    async def async_get_token(self, session: aiohttp.ClientSession, url, referer):
         headers = {
             "referer": referer
         }
-        response = self.session.get(url, headers=headers)
-        res = re.compile("token = '(.*?)'").findall(response.text)[0]
-        return res
+        async with session.get(url, headers=headers) as res:
+            text = await res.text()
+            return self.token_pattern.findall(text)[0]
 
     # 标准时间转换
     @classmethod
@@ -421,6 +449,14 @@ class CX:
         data = self.session.get("https://reserve.chaoxing.com/data/apps/seat/index").json()["data"]["curReserves"]
         return data
 
+    # 异步提交
+    async def async_submit(self, room_id, seat_num, hour):
+        async with aiohttp.ClientSession(cookies=self.session.cookies) as session:
+            # 预提交加快速度
+            await self.submit(room_id, seat_num, session, 1)
+            delay(hour)
+            await self.submit(room_id, seat_num, session)
+
 
 if __name__ == '__main__':
     # room_id 5933
@@ -431,17 +467,13 @@ if __name__ == '__main__':
     cx = CX(params['user_name'], params["password"])
     if params["type"] == "submit":
         retry_cnt = 0
-        # 预加载opencv
-        pre_load_cv2()
-        # 延迟
-        delay(int(params["hour"]))
         try:
-            cx.submit(params["room_id"], params["seat_id"])
+            asyncio.run(cx.async_submit(params["room_id"], params["seat_id"], int(params["hour"])))
         except Exception as e:
             retry_cnt += 1
             print(f"{get_formatted_datetime()}:发生错误，错误信息{e.args},重试次数{retry_cnt}")
             if retry_cnt < 10:
-                cx.submit(params["room_id"], params["seat_id"])
+                asyncio.run(cx.async_submit(params["room_id"], params["seat_id"], int(params["hour"])))
             else:
                 exit()
     elif params['type'] == "sign":
