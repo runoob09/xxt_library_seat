@@ -2,7 +2,7 @@ import random
 from hashlib import md5
 
 
-def sign(_0x353d93: int):
+def captcha_key_and_token(_0x353d93: int):
     def generate_random_chars():
         _0xa5adc8 = []
         _0x5cdcca = '0123456789abcdef'
