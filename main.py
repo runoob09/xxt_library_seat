@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 import re
 import time
 
@@ -62,6 +63,7 @@ async def slide_distance(bg, tp):
 class CX:
     # 实例化请传入手机号和密码
     def __init__(self, phonenums, password):
+        self.retry_cnt = 10
         self.user_name = utils.encryptByAES(phonenums)
         self.pwd = utils.encryptByAES(password)
         self.deptIdEnc = None
@@ -244,7 +246,7 @@ class CX:
         data = json.loads(text)
         return json.loads(data["extraData"])['validate']
 
-    async def submit_reserve_seat(self, start_time, end_time):
+    async def submit_reserve_seat(self, start_time, end_time, is_retry=True, retry_cnt=0):
         global params
         """
         生成座位预约所必须的参数信息
@@ -284,12 +286,17 @@ class CX:
             "token": submit_token
         }
         submit_params["enc"] = enc(submit_params)
-        response = self.session.get(url=url, params=submit_params, headers=headers)
-        return response.json()
+        data = self.session.get(url=url, params=submit_params, headers=headers).json()
+        # 判断当前的请求
+        if data.get("msg", "") == "非法预约" and retry_cnt < self.retry_cnt and is_retry:
+            logging.info(f"开始时间:{start_time},结束时间:{end_time},服务器未到预约时间发生错误！重试次数:{retry_cnt}")
+            return await self.submit_reserve_seat(start_time, end_time, retry_cnt=retry_cnt + 1)
+        else:
+            return data
 
     # 预提交，加速后面的速度
     async def pre_submit(self):
-        await self.submit_reserve_seat("08:00", "12:00")
+        await self.submit_reserve_seat("08:00", "12:00", is_retry=False)
 
     async def submit(self):
         """
@@ -306,6 +313,7 @@ class CX:
         logging.info("延时结束开始抢座")
         # 真正提交逻辑
         time_list = [("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")]
+        random.shuffle(time_list)
         t_start = time.time()
         for start_time, end_time in time_list:
             result = await self.submit_reserve_seat(start_time, end_time)
@@ -369,8 +377,7 @@ async def main():
     # 配置日志记录
     t_start = time.time()
     logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
-
+                        format='%(asctime)s - %(levelname)s - %(message)s', handlers=[logging.StreamHandler()])
     params = utils.get_param_dict()
     logging.info(f"当前执行的操作为：{params['type']}")
     # 实例化对象
@@ -381,8 +388,12 @@ async def main():
     }
     global async_session
     async with aiohttp.ClientSession(cookies=cx.session.cookies) as async_session:
-        # 触发动作
-        await action[params["type"]]()
+        try:
+            # 触发动作
+            await action[params["type"]]()
+        except Exception as e:
+            logging.error(f"发生错误,{e.args}")
+            await action[params["type"]]()
     t_end = time.time()
     logging.info(f"本次运行耗时{t_end - t_start}秒，脚本执行结束")
 

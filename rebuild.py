@@ -62,6 +62,7 @@ async def slide_distance(bg, tp):
 class CX:
     # 实例化请传入手机号和密码
     def __init__(self, phonenums, password):
+        self.retry_cnt = 10
         self.user_name = utils.encryptByAES(phonenums)
         self.pwd = utils.encryptByAES(password)
         self.deptIdEnc = None
@@ -244,7 +245,7 @@ class CX:
         data = json.loads(text)
         return json.loads(data["extraData"])['validate']
 
-    async def submit_reserve_seat(self, start_time, end_time):
+    async def submit_reserve_seat(self, start_time, end_time, retry_cnt=0):
         global params
         """
         生成座位预约所必须的参数信息
@@ -284,8 +285,13 @@ class CX:
             "token": submit_token
         }
         submit_params["enc"] = enc(submit_params)
-        response = self.session.get(url=url, params=submit_params, headers=headers)
-        return response.json()
+        data = self.session.get(url=url, params=submit_params, headers=headers).json()
+        # 判断当前的请求
+        if data.get("msg", "") == "非法请求" and retry_cnt < self.retry_cnt:
+            logging.info(f"服务器未到预约时间发生错误！")
+            return self.submit_reserve_seat(start_time, end_time, retry_cnt + 1)
+        else:
+            return data
 
     # 预提交，加速后面的速度
     async def pre_submit(self):
@@ -368,9 +374,7 @@ async def main():
     global params
     # 配置日志记录
     t_start = time.time()
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
-
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     params = utils.get_param_dict()
     logging.info(f"当前执行的操作为：{params['type']}")
     # 实例化对象
