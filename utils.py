@@ -44,7 +44,7 @@ def get_today_and_tomorrow():
     # 获取今天的日期
     today = datetime.now().date()
     # 获取明天的日期
-    tomorrow = today + timedelta(days=2)
+    tomorrow = today + timedelta(days=1)
     # 格式化日期为 "yyyy-MM-dd" 格式
     today = today.strftime("%Y-%m-%d")
     tomorrow = tomorrow.strftime("%Y-%m-%d")

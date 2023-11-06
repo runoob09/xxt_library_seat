@@ -3,7 +3,7 @@ import json
 import random
 import re
 import time
-
+from lxml import etree
 import aiohttp
 import cv2
 import numpy as np
@@ -63,7 +63,9 @@ async def slide_distance(bg, tp):
 class CX:
     # 实例化请传入手机号和密码
     def __init__(self, phonenums, password):
-        self.retry_cnt = 10
+        self.mappid = None
+        self.incode = None
+        self.retry_cnt = 5
         self.user_name = utils.encryptByAES(phonenums)
         self.pwd = utils.encryptByAES(password)
         self.deptIdEnc = None
@@ -102,28 +104,22 @@ class CX:
         self.session.post('http://passport2.chaoxing.com/fanyalogin', data=data)
 
     def get_fidEnc(self):
-        # data = {
-        #     'searchName': '',
-        #     '_t': self.get_date()
-        # }
-        # res = self.session.post(url='https://i.chaoxing.com/base/cacheUserOrg', data=data)
-        # print(res.json()["site"][0]['schoolname'], res.json()["site"][1]['schoolname'])  # 默认显示单位的前两个名称如果是多个单位请自行修改
-        # for index in res.json()["site"]:
-        #     fid = index['fid']
-        #     res = self.session.get(url='https://uc.chaoxing.com/mobileSet/homePage?'
-        #                                f'fid={fid}')
-        #     selector = etree.HTML(res.text)
-        #     mappid = selector.xpath(
-        #         '/html/body/div[1]/div[3]/ul/li[1]/@onclick')  # ☆ 注意 这一步可能需要调整 否则不能正常获取到mappid 每个学校不一样此处就没有用RE ☆
-        #     if mappid:
-        #         self.mappid = mappid[0].split('(')[1].split(',')[0]
-        # self.incode = self.session.cookies.get_dict()['wfwIncode']
-        # url = f'https://v1.chaoxing.com/mobile/openRecentApp?incode={self.incode}&mappId={self.mappid}'
-        # res = self.session.get(url=url, allow_redirects=False)
-        # # 每个学校的deptIdEnc值是固定的，如果是为只为你的学校提供服务请直接将deptIdEnc保存！不需要再执行get_fidEnc()方法了
-        # self.deptIdEnc = re.compile("fidEnc%3D(.*?)%").findall(res.headers['Location'])[0]
-        # # 获全部预约记录
-        return "64fc0d61619aa141"
+        res = self.session.get(url='https://i.chaoxing.com/base/cacheUserOrg')
+        logging.info(f"当前账号的单位是{res.json()['site'][0]['schoolname'], res.json()['site'][1]['schoolname']}")
+        for index in res.json()["site"]:
+            fid = index['fid']
+            res = self.session.get(url='https://uc.chaoxing.com/mobileSet/homePage?'
+                                       f'fid={fid}')
+            selector = etree.HTML(res.text)
+            mappid = selector.xpath(
+                '/html/body/div[1]/div[3]/ul/li[1]/@onclick')  # ☆ 注意 这一步可能需要调整 否则不能正常获取到mappid 每个学校不一样此处就没有用RE ☆
+            if mappid:
+                self.mappid = mappid[0].split('(')[1].split(',')[0]
+        self.incode = self.session.cookies.get_dict()['wfwIncode']
+        url = f'https://v1.chaoxing.com/mobile/openRecentApp?incode={self.incode}&mappId={self.mappid}'
+        res = self.session.get(url=url, allow_redirects=False)
+        # 每个学校的deptIdEnc值是固定的，如果是为只为你的学校提供服务请直接将deptIdEnc保存！不需要再执行get_fidEnc()方法了
+        self.deptIdEnc = re.compile("fidEnc%3D(.*?)%").findall(res.headers['Location'])[0]
 
     def get_my_seat_id(self):
         """
@@ -177,6 +173,15 @@ class CX:
         response = self.session.get(url=url)
         page_token = self.page_token_pattern.findall(response.text)[0]
         return page_token
+
+    def get_time_list(self):
+        global params
+        default = [("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")]
+        value = params.get("time_list", None)
+        if value is None or value == "default":
+            return default
+        else:
+            return [key_value.split("-") for key_value in value.split(",")]
 
     async def get_submit_token(self, page_token):
         """
@@ -312,7 +317,7 @@ class CX:
         utils.delay(int(params["hour"]), 30)
         logging.info("延时结束开始抢座")
         # 真正提交逻辑
-        time_list = [("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")]
+        time_list = self.get_time_list()
         random.shuffle(time_list)
         t_start = time.time()
         for start_time, end_time in time_list:
