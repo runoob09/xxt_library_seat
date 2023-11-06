@@ -8,6 +8,8 @@ import aiohttp
 import cv2
 import numpy as np
 import requests
+from tabulate import tabulate
+
 import utils
 from python.captcha import captcha_key_and_token
 from python.enc import enc
@@ -189,7 +191,7 @@ class CX:
         :param page_token: 页面token
         :return: token
         """
-        url = f"https://reserve.chaoxing.com/front/third/apps/seat/select?id=5933&day={self.today}&backLevel=2&pageToken={page_token}"
+        url = f"https://reserve.chaoxing.com/front/third/apps/seat/select?id={params['room_id']}&day={self.today}&backLevel=2&pageToken={page_token}"
         referer = 'https://office.chaoxing.com/front/apps/seat/list?'f'deptIdEnc={self.deptIdEnc}'
         headers = {
             "referer": referer
@@ -303,6 +305,34 @@ class CX:
     async def pre_submit(self):
         await self.submit_reserve_seat("08:00", "12:00", is_retry=False)
 
+    async def get_room_id_list(self):
+        """
+        获取所在单位的自习室名称和id
+        :return:
+        """
+        url = "https://reserve.chaoxing.com/data/apps/seat/room/list"
+        params = {
+            "time": "",
+            "cpage": "1",
+            "pageSize": "100",
+            "firstLevelName": "",
+            "secondLevelName": "",
+            "thirdLevelName": "",
+            "deptIdEnc": self.deptIdEnc
+        }
+        room_data = self.session.get(url=url, params=params).json()
+        # 展示自习室信息
+        data = [
+            ["自习室id", "自习室名称"]
+        ]
+        for i in room_data["data"]["seatRoomList"]:
+            room_name = (i["firstLevelName"] + "-" + i["secondLevelName"] + "-" + i["thirdLevelName"]).replace("\n", "")
+            room_id = i["id"]
+            data.append([room_name, room_id])
+        table = tabulate(data, headers="firstrow", tablefmt="plain", colalign=("left", "right"))
+        print(table)
+        return room_data
+
     async def submit(self):
         """
         座位预约逻辑
@@ -375,8 +405,6 @@ class CX:
                     logging.info(f"手机号{self.phone},当前已签到,且距离下个座位签到时间大于15分钟,无需签到")
         else:
             logging.info(f":手机号{self.phone},当前还未到签到时间")
-
-
 async def main():
     global params
     # 配置日志记录
@@ -389,7 +417,8 @@ async def main():
     cx = CX(params["user_name"], params["password"])
     action = {
         "submit": cx.submit,
-        "sign": cx.sign
+        "sign": cx.sign,
+        "list_room": cx.get_room_id_list
     }
     global async_session
     async with aiohttp.ClientSession(cookies=cx.session.cookies) as async_session:

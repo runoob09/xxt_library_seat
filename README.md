@@ -47,15 +47,42 @@
    python main.py user_name=<手机号> password=<密码> room_id=<自习室ID> seat_id=<座位号> hour=<小时数> type=<操作类型> time_list=<时间段>
    ```
 
-- <手机号>：你的手机号。
-- <密码>：你的密码。
-- <自习室ID>：要预约的自习室ID。
-- <座位号>：座位号。
-- <小时数>：当当前时间的小时数等于该参数值时，程序将执行抢座操作。
-- <时间段>：是一个二元组列表，不填写该参数则会使用默认的时间列表`[("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")]`。
-- <操作类型类型>
-    - `submit`:表示预约第二天的座位
-    - `sign`:表示进行签到操作
+#### submit命令
+
+该命令实现对于第二天的占座
+
+```shell
+python main.py user_name=<手机号> password=<密码> room_id=<自习室ID> seat_id=<座位号> hour=<小时数> type=submit time_list=<时间段>
+```
+
+- user_name:必选参数，账号
+- password:必选参数，密码
+- room_id:必选参数，要占座的自习室id
+- seat_id:必选参数，要占的座位id
+- hour:必选参数，程序会延迟到填写的hour继续执行
+- time_list:非必选参数，表示你要选择的座位时间。该参数的格式为`start_time1-end_time1,start_time2-end_time2...`
+
+### sign命令
+
+执行签到操作
+
+```shell
+python main.py user_name=<手机号> password=<密码> type=sign
+```
+
+- user_name:必选参数，账号
+- password:必选参数，密码
+
+### list_room命令
+
+列出学校所有的自习室名称及自习室id
+
+```shell
+python main.py user_name=<手机号> password=<密码> type=list_room
+```
+
+- user_name:必选参数，账号
+- password:必选参数，密码
 
 ## 贡献
 
@@ -88,6 +115,13 @@
 - `rebuild.py`:重构的main.py
 - `requirements.txt`:存放项目所需的依赖项列表，可通过 `pip install -r requirements.txt` 安装所有依赖。
 
+## 需求和反馈
+
+如果你有任何需求、建议或问题，请随时提出。请在 [Issues](https://github.com/runoob09/xxt_library_seat/issues)
+页面编写一个新的issue，我会尽快回复。
+
+非常欢迎你的反馈和贡献！
+
 ## 免责声明
 
 本项目仅供学习和研究使用，严禁用于商业目的。使用本项目产生的任何后果和责任将完全由使用者自行承担。
@@ -98,5 +132,6 @@
 
 ## 联系方式
 
-QQ:2499469495\
+QQ:2499469495
+
 微信:15591708527
