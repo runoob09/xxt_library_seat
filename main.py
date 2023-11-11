@@ -3,13 +3,11 @@ import json
 import random
 import re
 import time
-from lxml import etree
+from tabulate import tabulate
 import aiohttp
 import cv2
 import numpy as np
 import requests
-from tabulate import tabulate
-
 import utils
 from python.captcha import captcha_key_and_token
 from python.enc import enc
@@ -65,9 +63,7 @@ async def slide_distance(bg, tp):
 class CX:
     # 实例化请传入手机号和密码
     def __init__(self, phonenums, password):
-        self.mappid = None
-        self.incode = None
-        self.retry_cnt = 5
+        self.retry_cnt = 10
         self.user_name = utils.encryptByAES(phonenums)
         self.pwd = utils.encryptByAES(password)
         self.deptIdEnc = None
@@ -106,30 +102,38 @@ class CX:
         self.session.post('http://passport2.chaoxing.com/fanyalogin', data=data)
 
     def get_fidEnc(self):
-        res = self.session.get(url='https://i.chaoxing.com/base/cacheUserOrg')
-        logging.info(f"当前账号的单位是{res.json()['site'][0]['schoolname'], res.json()['site'][1]['schoolname']}")
+        data = {
+            'searchName': '',
+            '_t': utils.get_date()
+        }
+        res = self.session.post(url='https://i.chaoxing.com/base/cacheUserOrg', data=data)
         for index in res.json()["site"]:
+            if index["schoolname"].find("图书馆") == -1:
+                continue
+            logging.info(f"你的单位：{index['schoolname']}")
             fid = index['fid']
             res = self.session.get(url='https://uc.chaoxing.com/mobileSet/homePage?'
                                        f'fid={fid}')
-            selector = etree.HTML(res.text)
-            mappid = selector.xpath(
-                '/html/body/div[1]/div[3]/ul/li[1]/@onclick')  # ☆ 注意 这一步可能需要调整 否则不能正常获取到mappid 每个学校不一样此处就没有用RE ☆
-            if mappid:
-                self.mappid = mappid[0].split('(')[1].split(',')[0]
+            self.mappid = utils.parse_mappid(res.text)  # ☆ 注意 这一步可能需要调整 否则不能正常获取到mappid 每个学校不一样此处就没有用RE ☆
         self.incode = self.session.cookies.get_dict()['wfwIncode']
         url = f'https://v1.chaoxing.com/mobile/openRecentApp?incode={self.incode}&mappId={self.mappid}'
         res = self.session.get(url=url, allow_redirects=False)
         # 每个学校的deptIdEnc值是固定的，如果是为只为你的学校提供服务请直接将deptIdEnc保存！不需要再执行get_fidEnc()方法了
         self.deptIdEnc = re.compile("fidEnc%3D(.*?)%").findall(res.headers['Location'])[0]
+        logging.info(f"你所属单位的fidEnc是:{self.deptIdEnc}")
 
     def get_my_seat_id(self):
         """
         获取当前预约中的第一次预约的座位id
         :return: 座位id
         """
+        global params
         # 注意 老版本的系统需要将url中的seat改为seatengine
-        data = self.session.get(url="https://reserve.chaoxing.com/data/apps/seat/index").json()
+        url = {
+            "new": "https://reserve.chaoxing.com/data/apps/seat/index",
+            "old": f"https://reserve.chaoxing.com/data/apps/seat/index?seatId={params['seatId']}"
+        }[params.get("sys", "new")]
+        data = self.session.get(url=url).json()
         ids = [i["id"] for i in data["data"]["curReserves"]]
         return ids[0]
 
@@ -140,7 +144,12 @@ class CX:
         获取当前预约的列表
         :return:
         """
-        data = self.session.get("https://reserve.chaoxing.com/data/apps/seat/index").json()["data"]["curReserves"]
+        global params
+        url = {
+            "new": "https://reserve.chaoxing.com/data/apps/seat/index",
+            "old": f"https://reserve.chaoxing.com/data/apps/seatengine/index?seatId={params['seatId']}"
+        }[params.get("sys", "new")]
+        data = self.session.get(url=url).json()["data"]["curReserves"]
         return data
 
     # 验证图片验证码
@@ -191,7 +200,7 @@ class CX:
         :param page_token: 页面token
         :return: token
         """
-        url = f"https://reserve.chaoxing.com/front/third/apps/seat/select?id={params['room_id']}&day={self.today}&backLevel=2&pageToken={page_token}"
+        url = f"https://reserve.chaoxing.com/front/third/apps/seat/select?id=5933&day={self.today}&backLevel=2&pageToken={page_token}"
         referer = 'https://office.chaoxing.com/front/apps/seat/list?'f'deptIdEnc={self.deptIdEnc}'
         headers = {
             "referer": referer
@@ -305,34 +314,6 @@ class CX:
     async def pre_submit(self):
         await self.submit_reserve_seat("08:00", "12:00", is_retry=False)
 
-    async def get_room_id_list(self):
-        """
-        获取所在单位的自习室名称和id
-        :return:
-        """
-        url = "https://reserve.chaoxing.com/data/apps/seat/room/list"
-        params = {
-            "time": "",
-            "cpage": "1",
-            "pageSize": "100",
-            "firstLevelName": "",
-            "secondLevelName": "",
-            "thirdLevelName": "",
-            "deptIdEnc": self.deptIdEnc
-        }
-        room_data = self.session.get(url=url, params=params).json()
-        # 展示自习室信息
-        data = [
-            ["自习室id", "自习室名称"]
-        ]
-        for i in room_data["data"]["seatRoomList"]:
-            room_name = (i["firstLevelName"] + "-" + i["secondLevelName"] + "-" + i["thirdLevelName"]).replace("\n", "")
-            room_id = i["id"]
-            data.append([room_name, room_id])
-        table = tabulate(data, headers="firstrow", tablefmt="plain", colalign=("left", "right"))
-        print(table)
-        return room_data
-
     async def submit(self):
         """
         座位预约逻辑
@@ -357,11 +338,71 @@ class CX:
         t_end = time.time()
         logging.info(f"手机号{self.phone},预约耗费{t_end - t_start}秒")
 
+    async def old_submit(self):
+        global params
+        """
+        旧版座位预约系统
+        :return:
+        """
+        time_list = self.get_time_list()
+        for start_time, end_time in time_list:
+            result = self.old_submit_reserve_seat(start_time, end_time)
+            logging.info(
+                f"手机号{self.phone},房间号{params['room_id']},座位{params['seat_id']},起始时间{start_time},结束时间{end_time},预约日期{self.tomorrow},预约结果{result.get('msg', '成功')}")
+
+    def old_submit_reserve_seat(self, star_time, end_time):
+        """旧版系统提交逻辑"""
+        global params
+        # 1.获取提交时的token
+        token, referer = self.old_get_submit_token()
+        # 2.提交座位请求
+        url = "https://reserve.chaoxing.com/data/apps/seatengine/submit"
+        headers = {
+            "Referer": referer,
+            "X-Requested-With": "XMLHttpRequest"
+        }
+        p = {
+            "roomId": params["room_id"],
+            "startTime": star_time,
+            "endTime": end_time,
+            "day": self.tomorrow,
+            "captcha": "",
+            "seatNum": params["seat_id"],
+            "token": token
+        }
+        p["enc"] = enc(p)
+        data = self.session.get(url, params=p, headers=headers).json()
+        return data
+
+    def old_get_submit_token(self):
+        """
+        获取提交token
+        :return:
+        """
+        global params
+        url = "https://reserve.chaoxing.com/front/third/apps/seatengine/select"
+        p = {
+            "id": params["room_id"],
+            "day": self.today,
+            "backLevel": "2",
+            "seatId": params["seatId"],
+            "fidEnc": self.deptIdEnc
+        }
+        headers = {
+            "Referer": f"https://reserve.chaoxing.com/front/third/apps/seatengine/list?deptIdEnc={self.deptIdEnc}&seatId={params['seatId']}"
+        }
+        res = self.session.get(url, params=p, headers=headers)
+        return self.token_pattern.findall(res.text)[0], res.url
+
     def submit_sign(self, seat_id=None):
+        global params
         if seat_id is None:
             seat_id = self.get_my_seat_id()
-        response = self.session.get(url='https://office.chaoxing.com/data/apps/seat/sign?'
-                                        f'id={seat_id}')
+        url = {
+            "new": f"https://office.chaoxing.com/data/apps/seat/sign?id={seat_id}",
+            "old": f"https://office.chaoxing.com/data/apps/seatengine/sign?id={seat_id}&seatId={params['seatId']}"
+        }[params.get("sys", "new")]
+        response = self.session.get(url=url)
         logging.info(f"签到信息{response.text}")
 
     # 退座
@@ -370,7 +411,6 @@ class CX:
             seat_id = self.get_my_seat_id()
         response = self.session.get(url='https://office.chaoxing.com/data/apps/seat/signback?'
                                         f'id={seat_id}')
-        print(response.json())
 
     async def sign(self):
         # 获取当前的预约结果，判断是否需要签到
@@ -405,6 +445,41 @@ class CX:
                     logging.info(f"手机号{self.phone},当前已签到,且距离下个座位签到时间大于15分钟,无需签到")
         else:
             logging.info(f":手机号{self.phone},当前还未到签到时间")
+
+    async def get_room_id_list(self):
+        """
+        获取所在单位的自习室名称和id
+        :return:
+        """
+        global params
+        url = {
+            "new": "https://reserve.chaoxing.com/data/apps/seat/room/list",
+            "old": "https://reserve.chaoxing.com/data/apps/seatengine/room/list"
+        }[params.get("sys", "new")]
+        p = {
+            "time": "",
+            "cpage": "1",
+            "pageSize": "100",
+            "firstLevelName": "",
+            "secondLevelName": "",
+            "thirdLevelName": "",
+            "deptIdEnc": self.deptIdEnc,
+            "seatId": params.get("seatId", None)
+        }
+        room_data = self.session.get(url=url, params=p).json()
+        # 展示自习室信息
+        data = [
+            ["自习室id", "自习室名称"]
+        ]
+        for i in room_data["data"]["seatRoomList"]:
+            room_name = (i["firstLevelName"] + "-" + i["secondLevelName"] + "-" + i["thirdLevelName"]).replace("\n", "")
+            room_id = i["id"]
+            data.append([room_id, room_name])
+        table = tabulate(data, headers="firstrow", tablefmt="plain", colalign=("left", "right"))
+        print(table)
+        return room_data
+
+
 async def main():
     global params
     # 配置日志记录
@@ -418,6 +493,7 @@ async def main():
     action = {
         "submit": cx.submit,
         "sign": cx.sign,
+        "old_submit": cx.old_submit,
         "list_room": cx.get_room_id_list
     }
     global async_session

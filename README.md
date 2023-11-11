@@ -41,48 +41,80 @@
 
 ### 运行程序
 
-你可以按照下面的格式来运行程序
+程序包含以下参数：
 
-   ```shell
-   python main.py user_name=<手机号> password=<密码> room_id=<自习室ID> seat_id=<座位号> hour=<小时数> type=<操作类型> time_list=<时间段>
-   ```
+- user_name:学习通账号的手机号
+- password:学习通密码，如果没有设置密码请设置一个密码。
+- room_id:要预约的自习室的id，可以通过[list_room](#listroom命令)命令进行查看
+- seat_id:要预约的位置的座位号
+- time_list:预约的时间段，根据学校图书馆的设置，按照该格式进行编写`start_time1-end_time1,start_time2-end_time2,....`
+  ,每个时间段的间隔按照一次最大可预约的时长编写，如果没有最大时长限制，请直接按照格式填写开始到结束的时间即可。程序内提供了默认的时间参数`("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")`
+- hour:程序延迟到指定的hour数运行，会执行除了提交座位以外的其他逻辑。例如hour=8，表示程序将在8点中执行。
+- sys:预约系统类型，学习通提供了两种座位预约系统，该参数默认值为`new`,旧系统请使用`sys=old`
+    - 旧系统：旧系统安全性较低，不会进行验证，如果你的学校的系统在预约座位时不会进行滑动验证码校验，大概率可能时旧系统
+    - 新系统：新系统提交座位时需要进行校验
+- seatId:旧系统需要的参数，该参数需要指定，具体请查看[旧系统seatId](./旧系统Id.md)
+- type:要执行的操作类型
+    - submit:新系统的提交方法,使用方法请参考[submit](#submit命令)
+    - list_room:查看学校所有的自习室,使用方法请参考[list_room](#listroom命令)
+    - sign:签到命令,使用方法请参考[sign](#sign命令)
+    - old_submit:旧系统的座位预约方法，使用方法参考[old_submit](#oldsubmit命令)
+
+#### old_submit命令
+
+old_submit命令的使用方法如下，可以预约第二天的座位
+
+```shell
+python main.py user_name=手机号 password=密码 room_id=自习室ID seat_id=座位号 hour=小时数 type=old_submit time_list=时间段 sys=old seatId=seatId
+```
+
+- user_name:必选参数
+- password:必选参数
+- room_id:必选参数
+- seat_id:必选参数
+- hour:必选参数
+- time_list:非必选参数
+- sys:必选参数
+- seatId:必选参数，请查询文档获得你的学校的参数
 
 #### submit命令
 
-该命令实现对于第二天的占座
+submit命令的使用方法如下，可以预约第二天的座位
 
 ```shell
-python main.py user_name=<手机号> password=<密码> room_id=<自习室ID> seat_id=<座位号> hour=<小时数> type=submit time_list=<时间段>
+python main.py user_name=手机号 password=密码 room_id=自习室ID seat_id=座位号 hour=小时数 type=submit time_list=时间段
 ```
 
-- user_name:必选参数，账号
-- password:必选参数，密码
-- room_id:必选参数，要占座的自习室id
-- seat_id:必选参数，要占的座位id
-- hour:必选参数，程序会延迟到填写的hour继续执行
-- time_list:非必选参数，表示你要选择的座位时间。该参数的格式为`start_time1-end_time1,start_time2-end_time2...`
+- user_name:必选参数
+- password:必选参数
+- room_id:必选参数
+- seat_id:必选参数
+- hour:必选参数
+- time_list:非必选参数
 
-### sign命令
+#### sign命令
 
 执行签到操作
 
 ```shell
-python main.py user_name=<手机号> password=<密码> type=sign
+python main.py user_name=<手机号> password=<密码> type=sign sys=?
 ```
 
 - user_name:必选参数，账号
 - password:必选参数，密码
+- sys:非必选参数，如果你的学校时旧系统请填写`sys=old`
 
-### list_room命令
+#### list_room命令
 
 列出学校所有的自习室名称及自习室id
 
 ```shell
-python main.py user_name=<手机号> password=<密码> type=list_room
+python main.py user_name=<手机号> password=<密码> type=list_room sys=?
 ```
 
 - user_name:必选参数，账号
 - password:必选参数，密码
+- sys:非必选参数，如果你的学校时旧系统请填写`sys=old`
 
 ## 贡献
 
@@ -137,6 +169,15 @@ python main.py user_name=<手机号> password=<密码> type=list_room
 如果您在安装和配置本项目时遇到困难，我提供付费帮助来解决与代码安装和配置相关的问题。
 
 请注意，我的联系方式仅用于与代码安装和配置相关的帮助请求。我无法回答与其他主题无关的咨询、请求或合作邀约。
+
+我在项目中提供我的联系方式，旨在鼓励合作、分享知识和解决问题。
+
+我愿意与您就以下内容进行讨论：
+
+- 代码的使用和功能
+- 代码的改进和贡献
+- 与代码相关的错误、问题和建议
+- 你的学校是旧系统，但没有找到对应的seatId
 
 如果您需要付费支持来解决安装和配置问题，请通过以下方式与我联系：
 

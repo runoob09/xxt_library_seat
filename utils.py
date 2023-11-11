@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from Cryptodome.Cipher import AES
 from Cryptodome.Util.Padding import pad
 import sys
+from lxml import etree
+
 
 # 获取当前的十三位时间戳
 def get_time_stamp():
@@ -60,3 +62,22 @@ def get_param_dict():
     for k, v in [i.split("=") for i in sys.argv[1:]]:
         params[k] = v
     return params
+
+
+def get_date():
+    """
+    获取日期字符串
+    :param cls:
+    :return:
+    """
+    return time.strftime('%a %b %d %Y %I:%M:%S GMT+0800 ', time.localtime(time.time())) + '(中国标准时间)'
+
+
+def parse_mappid(html: str):
+    selector = etree.HTML(html)
+    mappid = selector.xpath('/html/body/div[1]/div[3]/ul/li[1]/@onclick')
+    if mappid:
+        mappid = mappid[0].split('(')[1].split(',')[0]
+    else:
+        mappid = selector.xpath("//div[@role='option']/@mappid")[0]
+    return mappid
