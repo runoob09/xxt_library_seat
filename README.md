@@ -45,7 +45,7 @@
 
 - user_name:学习通账号的手机号
 - password:学习通密码，如果没有设置密码请设置一个密码。
-- room_id:要预约的自习室的id，可以通过[list_room](#listroom命令)命令进行查看
+- room_id:要预约的自习室的id，可以通过[list_room](#list_room命令)命令进行查看
 - seat_id:要预约的位置的座位号
 - time_list:预约的时间段，根据学校图书馆的设置，按照该格式进行编写`start_time1-end_time1,start_time2-end_time2,....`
   ,每个时间段的间隔按照一次最大可预约的时长编写，如果没有最大时长限制，请直接按照格式填写开始到结束的时间即可。程序内提供了默认的时间参数`("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")`
@@ -56,7 +56,7 @@
 - seatId:旧系统需要的参数，该参数需要指定，具体请查看[旧系统seatId](./旧系统Id.md)
 - type:要执行的操作类型
     - submit:新系统的提交方法,使用方法请参考[submit](#submit命令)
-    - list_room:查看学校所有的自习室,使用方法请参考[list_room](#listroom命令)
+    - list_room:查看学校所有的自习室,使用方法请参考[list_room](#list_room命令)
     - sign:签到命令,使用方法请参考[sign](#sign命令)
     - old_submit:旧系统的座位预约方法，使用方法参考[old_submit](#oldsubmit命令)
 

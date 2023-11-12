@@ -11,7 +11,6 @@ import requests
 import utils
 from python.captcha import captcha_key_and_token
 from python.enc import enc
-import logging
 
 
 # 异步加载数据
@@ -62,7 +61,8 @@ async def slide_distance(bg, tp):
 
 class CX:
     # 实例化请传入手机号和密码
-    def __init__(self, phonenums, password):
+    def __init__(self, phonenums, password, logger):
+        self.logger = logger
         self.retry_cnt = 10
         self.user_name = utils.encryptByAES(phonenums)
         self.pwd = utils.encryptByAES(password)
@@ -110,7 +110,7 @@ class CX:
         for index in res.json()["site"]:
             if index["schoolname"].find("图书馆") == -1:
                 continue
-            logging.info(f"你的单位：{index['schoolname']}")
+            self.logger.info(f"你的单位：{index['schoolname']}")
             fid = index['fid']
             res = self.session.get(url='https://uc.chaoxing.com/mobileSet/homePage?'
                                        f'fid={fid}')
@@ -120,7 +120,7 @@ class CX:
         res = self.session.get(url=url, allow_redirects=False)
         # 每个学校的deptIdEnc值是固定的，如果是为只为你的学校提供服务请直接将deptIdEnc保存！不需要再执行get_fidEnc()方法了
         self.deptIdEnc = re.compile("fidEnc%3D(.*?)%").findall(res.headers['Location'])[0]
-        logging.info(f"你所属单位的fidEnc是:{self.deptIdEnc}")
+        self.logger.info(f"你所属单位的fidEnc是:{self.deptIdEnc}")
 
     def get_my_seat_id(self):
         """
@@ -131,7 +131,7 @@ class CX:
         # 注意 老版本的系统需要将url中的seat改为seatengine
         url = {
             "new": "https://reserve.chaoxing.com/data/apps/seat/index",
-            "old": f"https://reserve.chaoxing.com/data/apps/seat/index?seatId={params['seatId']}"
+            "old": f"https://reserve.chaoxing.com/data/apps/seat/index?seatId={params.get('seatId', None)}"
         }[params.get("sys", "new")]
         data = self.session.get(url=url).json()
         ids = [i["id"] for i in data["data"]["curReserves"]]
@@ -147,7 +147,7 @@ class CX:
         global params
         url = {
             "new": "https://reserve.chaoxing.com/data/apps/seat/index",
-            "old": f"https://reserve.chaoxing.com/data/apps/seatengine/index?seatId={params['seatId']}"
+            "old": f"https://reserve.chaoxing.com/data/apps/seatengine/index?seatId={params.get('seatId', None)}"
         }[params.get("sys", "new")]
         data = self.session.get(url=url).json()["data"]["curReserves"]
         return data
@@ -305,7 +305,8 @@ class CX:
         data = self.session.get(url=url, params=submit_params, headers=headers).json()
         # 判断当前的请求
         if data.get("msg", "") == "非法预约" and retry_cnt < self.retry_cnt and is_retry:
-            logging.info(f"开始时间:{start_time},结束时间:{end_time},服务器未到预约时间发生错误！重试次数:{retry_cnt}")
+            self.logger.info(
+                f"开始时间:{start_time},结束时间:{end_time},服务器未到预约时间发生错误！重试次数:{retry_cnt}")
             return await self.submit_reserve_seat(start_time, end_time, retry_cnt=retry_cnt + 1)
         else:
             return data
@@ -323,20 +324,20 @@ class CX:
         t_start = time.time()
         await self.pre_submit()
         t_end = time.time()
-        logging.info(f"预抢座已完成,耗时{t_end - t_start}秒")
+        self.logger.info(f"预抢座已完成,耗时{t_end - t_start}秒")
         # 开始延迟，等待抢座
         utils.delay(int(params["hour"]), 30)
-        logging.info("延时结束开始抢座")
+        self.logger.info("延时结束开始抢座")
         # 真正提交逻辑
         time_list = self.get_time_list()
         random.shuffle(time_list)
         t_start = time.time()
         for start_time, end_time in time_list:
             result = await self.submit_reserve_seat(start_time, end_time)
-            logging.info(
+            self.logger.info(
                 f"手机号{self.phone},房间号{params['room_id']},座位{params['seat_id']},起始时间{start_time},结束时间{end_time},预约日期{self.tomorrow},预约结果{result.get('msg', '成功')}")
         t_end = time.time()
-        logging.info(f"手机号{self.phone},预约耗费{t_end - t_start}秒")
+        self.logger.info(f"手机号{self.phone},预约耗费{t_end - t_start}秒")
 
     async def old_submit(self):
         global params
@@ -347,7 +348,7 @@ class CX:
         time_list = self.get_time_list()
         for start_time, end_time in time_list:
             result = self.old_submit_reserve_seat(start_time, end_time)
-            logging.info(
+            self.logger.info(
                 f"手机号{self.phone},房间号{params['room_id']},座位{params['seat_id']},起始时间{start_time},结束时间{end_time},预约日期{self.tomorrow},预约结果{result.get('msg', '成功')}")
 
     def old_submit_reserve_seat(self, star_time, end_time):
@@ -389,7 +390,7 @@ class CX:
             "fidEnc": self.deptIdEnc
         }
         headers = {
-            "Referer": f"https://reserve.chaoxing.com/front/third/apps/seatengine/list?deptIdEnc={self.deptIdEnc}&seatId={params['seatId']}"
+            "Referer": f"https://reserve.chaoxing.com/front/third/apps/seatengine/list?deptIdEnc={self.deptIdEnc}&seatId={params.get('seatId', None)}"
         }
         res = self.session.get(url, params=p, headers=headers)
         return self.token_pattern.findall(res.text)[0], res.url
@@ -400,10 +401,10 @@ class CX:
             seat_id = self.get_my_seat_id()
         url = {
             "new": f"https://office.chaoxing.com/data/apps/seat/sign?id={seat_id}",
-            "old": f"https://office.chaoxing.com/data/apps/seatengine/sign?id={seat_id}&seatId={params['seatId']}"
+            "old": f"https://office.chaoxing.com/data/apps/seatengine/sign?id={seat_id}&seatId={params.get('seatId', None)}"
         }[params.get("sys", "new")]
         response = self.session.get(url=url)
-        logging.info(f"签到信息{response.text}")
+        self.logger.info(f"签到信息{response.text}")
 
     # 退座
     def signback(self, seat_id=None):
@@ -417,7 +418,7 @@ class CX:
         cur_submit = self.get_submit_list()
         # 如果没有签到信息
         if len(cur_submit) == 0:
-            logging.info(f"手机号{self.phone},你当前还没有预约信息！")
+            self.logger.info(f"手机号{self.phone},你当前还没有预约信息！")
             return
         # 第一个为当前的数据
         now = cur_submit[0]
@@ -425,16 +426,16 @@ class CX:
         if utils.get_time_stamp() - now["startTime"] > -15 * 60 * 1000:
             if now["status"] != 1:
                 # 不是就绪的逻辑，则直接进行签到
-                logging.info(f"手机号{self.phone},当前状态:{self.status.get(now['status'], '未知状态')},将为您签到")
+                self.logger.info(f"手机号{self.phone},当前状态:{self.status.get(now['status'], '未知状态')},将为您签到")
                 self.submit_sign(now["id"])
             else:
                 # 已经签到，查看当前是否还有下一个预约
                 if len(cur_submit) == 1:
-                    logging.info(f"手机号{self.phone},你已签到无需签到")
+                    self.logger.info(f"手机号{self.phone},你已签到无需签到")
                     return
                 # 查看结束时间与当前的差值是否在15分钟内
                 if -15 * 60 * 1000 < now['endTime'] - utils.get_time_stamp() < 15 * 60 * 1000:
-                    logging.info(f"手机号{self.phone},距离下一个位置的签到时间不足15分钟，将签退签到下一个")
+                    self.logger.info(f"手机号{self.phone},距离下一个位置的签到时间不足15分钟，将签退签到下一个")
                     # 退座
                     self.signback(now["id"])
                     # 进行下一个签到
@@ -442,9 +443,9 @@ class CX:
                 # 状态既没有是其他的，也没有距离下次签到时间小于15分钟
                 else:
                     # 无需进行签到
-                    logging.info(f"手机号{self.phone},当前已签到,且距离下个座位签到时间大于15分钟,无需签到")
+                    self.logger.info(f"手机号{self.phone},当前已签到,且距离下个座位签到时间大于15分钟,无需签到")
         else:
-            logging.info(f":手机号{self.phone},当前还未到签到时间")
+            self.logger.info(f":手机号{self.phone},当前还未到签到时间")
 
     async def get_room_id_list(self):
         """
@@ -484,12 +485,11 @@ async def main():
     global params
     # 配置日志记录
     t_start = time.time()
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s', handlers=[logging.StreamHandler()])
     params = utils.get_param_dict()
-    logging.info(f"当前执行的操作为：{params['type']}")
+    logger = utils.logger_config("./logs", f"{params['type']}")
+    logger.info(f"当前执行的操作为：{params['type']}")
     # 实例化对象
-    cx = CX(params["user_name"], params["password"])
+    cx = CX(params["user_name"], params["password"], logger)
     action = {
         "submit": cx.submit,
         "sign": cx.sign,
@@ -502,10 +502,10 @@ async def main():
             # 触发动作
             await action[params["type"]]()
         except Exception as e:
-            logging.error(f"发生错误,{e.args}")
+            logger.error(f"发生错误,{e.args}")
             await action[params["type"]]()
     t_end = time.time()
-    logging.info(f"本次运行耗时{t_end - t_start}秒，脚本执行结束")
+    logger.info(f"本次运行耗时{t_end - t_start}秒，脚本执行结束")
 
 
 if __name__ == '__main__':
