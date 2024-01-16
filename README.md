@@ -43,110 +43,18 @@
 
 程序包含以下参数：
 
-- user_name:学习通账号的手机号
-- password:学习通密码，如果没有设置密码请设置一个密码。
-- room_id:要预约的自习室的id，可以通过[list_room](#list_room命令)命令进行查看
-- seat_id:要预约的位置的座位号
-- time_list:预约的时间段，根据学校图书馆的设置，按照该格式进行编写`start_time1-end_time1,start_time2-end_time2,....`
-  ,每个时间段的间隔按照一次最大可预约的时长编写，如果没有最大时长限制，请直接按照格式填写开始到结束的时间即可。程序内提供了默认的时间参数`("08:00", "12:00"), ("12:00", "16:00"), ("16:00", "20:00"), ("20:00", "22:00")`
-- hour:程序延迟到指定的hour数运行，会执行除了提交座位以外的其他逻辑。例如hour=8，表示程序将在8点中执行。
-- sys:预约系统类型，学习通提供了两种座位预约系统，该参数默认值为`new`,旧系统请使用`sys=old`
-    - 旧系统：旧系统安全性较低，不会进行验证，如果你的学校的系统在预约座位时不会进行滑动验证码校验，大概率可能时旧系统
-    - 新系统：新系统提交座位时需要进行校验
-- seatId:旧系统需要的参数，该参数需要指定，具体请查看[旧系统seatId](./旧系统Id.md)
-- type:要执行的操作类型
-    - submit:新系统的提交方法,使用方法请参考[submit](#submit命令)
-    - list_room:查看学校所有的自习室,使用方法请参考[list_room](#list_room命令)
-    - sign:签到命令,使用方法请参考[sign](#sign命令)
-    - old_submit:旧系统的座位预约方法，使用方法参考[old_submit](#oldsubmit命令)
-
-#### old_submit命令
-
-old_submit命令的使用方法如下，可以预约第二天的座位
-
-```shell
-python main.py user_name=手机号 password=密码 room_id=自习室ID seat_id=座位号 hour=小时数 type=old_submit time_list=时间段 sys=old seatId=seatId
-```
-
-- user_name:必选参数
-- password:必选参数
-- room_id:必选参数
-- seat_id:必选参数
-- hour:必选参数
-- time_list:非必选参数
-- sys:必选参数
-- seatId:必选参数，请查询文档获得你的学校的参数
-
-#### submit命令
-
-submit命令的使用方法如下，可以预约第二天的座位
-
-```shell
-python main.py user_name=手机号 password=密码 room_id=自习室ID seat_id=座位号 hour=小时数 type=submit time_list=时间段
-```
-
-- user_name:必选参数
-- password:必选参数
-- room_id:必选参数
-- seat_id:必选参数
-- hour:必选参数
-- time_list:非必选参数
-
-#### sign命令
-
-执行签到操作
-
-```shell
-python main.py user_name=<手机号> password=<密码> type=sign sys=?
-```
-
-- user_name:必选参数，账号
-- password:必选参数，密码
-- sys:非必选参数，如果你的学校时旧系统请填写`sys=old`
-
-#### list_room命令
-
-列出学校所有的自习室名称及自习室id
-
-```shell
-python main.py user_name=<手机号> password=<密码> type=list_room sys=?
-```
-
-- user_name:必选参数，账号
-- password:必选参数，密码
-- sys:非必选参数，如果你的学校时旧系统请填写`sys=old`
-
-## 贡献
-
-如果你发现任何问题或有改进建议，请在项目的 [Issue 页面]() 提交问题或功能请求。
-
-如果你希望为项目做出贡献，请按照以下步骤进行：
-
-1. 克隆项目到本地：
-
-   ```shell
-   git clone https://github.com/runoob09/xxt_library_seat
-    ```
-2. 创建一个新的分支
-    ```shell
-   git checkout -b feature/your-feature
-   ```
-3. 进行修改和改进。
-
-4. 提交代码并创建一个 Pull Request。
-
-欢迎并感谢任何形式的贡献！
-
-## 项目结构
-
-- `js`:该文件夹下是一些参数的加密的相关js逻辑
-- `python`:将js的逻辑转换为python的逻辑
-- `main.py`:主程序文件，用于执行自习室座位预约和签到操作的脚本。
-- `README.md`:项目的说明文档，提供了安装、配置、运行等方面的详细信息。
-- `utils.py`:提供的一些工具方法
-- `rebuild.py`:重构的main.py
-- `requirements.txt`:存放项目所需的依赖项列表，可通过 `pip install -r requirements.txt` 安装所有依赖。
-
+- user_name:用户名，也就是你的手机号（学习通账号绑定的手机号）
+- password:密码，也就是你的学习通账号的密码
+- type:所执行的命令类型：
+  - `submit`: 预约座位
+- hour:预约座位的时间,例如学校20:00可以预约第二天新的座位，那么可以设置为20:00
+- seat_id:旧版座位预约需要用到的一个参数，有能力的可以自行抓包
+- seat_num:座位编号，即要预约的座位在所在自习室中的编号
+- room_id:自习室的编号
+- day_offset:日期的偏移量
+- time_list:要预约的时间段,格式`起始时间1-结束时间1,起始时间2-结束时间2....`
+- use_captcha:是否需要验证码，不填写表示不需要，反之，则需要
+- system_type:预约系统类型，默认为新系统，旧系统请填写old
 ## 需求和反馈
 
 如果你有任何需求、建议或问题，请随时提出。请在 [Issues](https://github.com/runoob09/xxt_library_seat/issues)
