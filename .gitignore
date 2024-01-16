@@ -3,5 +3,5 @@
 test.py
 .ipynb_checkpoints
 __pycache__
-./test.py
-./logs
+config.py
+check_free.py

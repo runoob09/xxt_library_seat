@@ -8,8 +8,8 @@ import cv2
 import numpy as np
 import requests
 import utils
-from python.captcha import captcha_key_and_token
-from python.enc import enc
+from sign.captcha import captcha_key_and_token
+from sign.enc import enc
 import logging
 
 
