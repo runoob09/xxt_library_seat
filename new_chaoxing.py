@@ -138,7 +138,7 @@ class NewChaoxing(Chaoxing):
             "seatNum": self.p.get_seat_num(),
             "token": submit_token
         }
-        p["enc"] = enc(p)
+        print(p)
         data = self.session.get(url, params=p, headers=headers).json()
         return data
 
@@ -172,7 +172,7 @@ class NewChaoxing(Chaoxing):
         t_end = time.time()
         self.logger.info(f"预抢座已完成,耗时{t_end - t_start}秒")
         # 开始延迟，等待抢座
-        system_utils.delay(int(self.p.hour), 30)
+        system_utils.delay(self.p.time_delay, 30)
         self.logger.info("延时结束开始抢座")
         # 真正提交逻辑
         time_list = self.get_time_list()

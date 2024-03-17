@@ -3,7 +3,7 @@ class param(object):
         self.user_name = ""
         self.password = ""
         self.type = ""
-        self.hour = 0
+        self.time_delay = ""
         self.room_id = 0
         self.seat_num = 0
         self.seat_id = 0

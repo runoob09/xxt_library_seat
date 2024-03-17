@@ -27,8 +27,5 @@ def get_param():
     # 根据param的参数从param_dict中获取数据进行填充
     for k, v in p.__dict__.items():
         if k in params_dict:
-            if str(params_dict[k]).isdigit():
-                setattr(p, k, int(params_dict[k]))
-            else:
-                setattr(p, k, params_dict[k])
+            setattr(p, k, params_dict[k])
     return p

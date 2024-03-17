@@ -28,7 +28,7 @@ class Chaoxing:
         self.page_token_pattern = re.compile(r"'&pageToken=' \+ '(.*)'}")
         # 当天的日期
         self.today = date_utils.get_date(0)
-        self.reserve_day = date_utils.get_date(self.p.day_offset)
+        self.reserve_day = date_utils.get_date(int(self.p.day_offset))
         self.retry_cnt = 10
         # 访问的地址
         self.page_token_url = "https://office.chaoxing.com/front/apps/seat/list?deptIdEnc={}"
@@ -179,7 +179,6 @@ class Chaoxing:
     async def __async_fetch__(self, url):
         async with self.async_session.get(url) as response:
             return await response.content.read()
-
 
     async def submit(self):
         pass

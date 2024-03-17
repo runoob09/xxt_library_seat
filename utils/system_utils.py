@@ -6,14 +6,15 @@ import time
 from datetime import datetime
 
 
-def delay(hour, freq=60):
+def delay(time_delay, freq=60):
     """
     延时函数，让程序到hour时开始运行
-    :param hour: 小时数
+    :param time_delay: 延时
     :param freq: 触发频率
     :return:
     """
-    while datetime.now().hour != hour:
+    time_delay = datetime.strptime(time_delay, "%H:%M:%S").time()
+    while datetime.now().time() < time_delay:
         time.sleep(1 / freq)
 
 
