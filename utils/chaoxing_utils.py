@@ -10,10 +10,17 @@ def parse_mappid(html: str):
     :param html:
     :return:
     """
+    xpath = ['/html/body/div[1]/div[3]/ul/li[1]/@onclick',
+             "/html/body/div[1]/div[4]/ul/li[1]/@onclick"]
     selector = etree.HTML(html)
-    mappid = selector.xpath('/html/body/div[1]/div[3]/ul/li[1]/@onclick')
-    if mappid:
-        mappid = mappid[0].split('(')[1].split(',')[0]
+    mappid = []
+    for x in xpath:
+        mappid = selector.xpath(x)
+        if len(mappid) != 0:
+            break
+    # 判断当前的解析结果
+    if len(mappid) == 0:
+        # 使用其他解析
+        return selector.xpath("//div[@role='option']/@mappid")[0]
     else:
-        mappid = selector.xpath("//div[@role='option']/@mappid")[0]
-    return mappid
+        return mappid[0].split('(')[1].split(',')[0]
