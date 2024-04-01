@@ -85,7 +85,7 @@ class Chaoxing:
             fid = index['fid']
             res = self.session.get(url=f"https://uc.chaoxing.com/mobileSet/homePage?fid={fid}")
             # 当前页面包含座位预约这个应用
-            if res.text.find("座位预约") != -1:
+            if res.text.find("预约") != -1:
                 self.logger.info(f"你的单位：{index['schoolname']}")
                 fid = index['fid']
                 res = self.session.get(url=f"https://uc.chaoxing.com/mobileSet/homePage?fid={fid}")
